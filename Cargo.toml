@@ -1,0 +1,10 @@
+[package]
+name = "nextgen"
+version = "0.1.0"
+authors = ["Florian Anderiasch <fa@art-core.org>"]
+edition = "2018"
+
+[dependencies]
+pulldown-cmark = "0.6.1"
+regex = "1"
+walkdir = "2"

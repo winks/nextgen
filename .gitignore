@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+/content
+/static
+/public
+/theme
