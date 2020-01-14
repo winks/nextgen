@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
 
-    let tera = match Tera::new("theme/*.html") {
+    let tera = match Tera::new("theme/**/*.html") {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
@@ -49,6 +49,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    let mut content_sections = vec![];
+    for entry in WalkDir::new(dir_content)
+            .into_iter()
+            .filter_map(Result::ok) {
+        let path0 = entry.path();
+        if path0 == pc0 { continue; }
+        if entry.file_type().is_dir() {
+            let path = path0.strip_prefix(dir_content)?;
+            println!("d:d: {} ", path.display());
+            fs::create_dir_all(pp0.join(path))?;
+            let x = path.to_str().unwrap();
+            content_sections.push(String::from(x));
+        }
+    }
 
     // markdown files
     for entry in WalkDir::new(dir_content)
@@ -58,12 +72,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if path0 == pc0 { continue; }
         let path = path0.strip_prefix(dir_content)?;
         if entry.file_type().is_dir() {
-            println!("d:d: {} ", path.display());
-            fs::create_dir_all(pp0.join(path))?;
+            //println!("d:d: {} ", path.display());
+            //fs::create_dir_all(pp0.join(path))?;
+            //content_sections.push(path0);
             continue;
         }
-        let fname = entry.file_name();
-        if !fname.to_string_lossy().ends_with(".md") {
+        let fname = entry.file_name().to_str().unwrap();
+        if !fname.ends_with(".md") {
             continue;
         }
 
@@ -73,8 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         globals.insert("Site_Title", "f5n dot org");
         globals.insert("Site_Params_defaultDescription", "a website");
 
-        let mut tpl = "page.html";
-        globals.insert("Template", tpl);
+        let mut tpl = "page.html".to_string();
+        globals.insert("Template", &tpl);
 
         //let metadata = entry.metadata()?;
         //let last_mod = metadata.modified()?.elapsed()?.as_secs();
@@ -103,17 +118,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
             if arg == "Template" {
-                tpl = val;
+                tpl = val.to_string();
             }
             globals.insert(arg, val);
         }
+
+        let words : Vec<&str> = parts[2].split(" ").collect();
+        let wc : usize = (words.len() / 200) + 1;
+        globals.insert("ReadingTime", &wc);
 
         let parser = Parser::new(parts[2]);
         let mut html = String::new();
         html::push_html(&mut html, parser);
         globals.insert("content", &html);
 
-        let rv = tera.render(tpl, &globals)?;
+        for sec in &content_sections {
+            let mut sc = String::from(sec);
+            sc.push_str("/");
+            println!("x {} {} {:?}", path.display(), sc, path.starts_with(&sc));
+            if path.starts_with(&sc) {
+                sc.replace_range(sc.len()-1.., "_");
+                sc.push_str(&tpl);
+                tpl = sc;
+                globals.insert("Section", &sec);
+                break;
+            }
+        }
+
+        // @TODO DateFormat
+
+        let rv = tera.render(&tpl, &globals)?;
 
         let p1 = pp0.join(path).with_extension("html");
         println!("d:f: {}",p1.strip_prefix(pp0).unwrap().display());
