@@ -1,18 +1,54 @@
-extern crate tera;
 extern crate pulldown_cmark;
 extern crate regex;
+extern crate serde;
+extern crate tera;
 extern crate walkdir;
 
 use pulldown_cmark::{Parser, html};
 use regex::Regex;
+use serde::Deserialize;
 use tera::{Context, Tera};
+use toml::value::Datetime;
 use walkdir::WalkDir;
 
 use std::{env, fs};
 use std::path::Path;
 use std::io::prelude::*;
 
+#[derive(Deserialize)]
+struct SiteConfig {
+    baseurl: String,
+    title: String,
+}
+
+#[derive(Deserialize)]
+struct FrontMatter {
+    date: Datetime,
+    description: Option<String>,
+    draft: Option<bool>,
+    title: String,
+    template: Option<String>,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // config file
+    let mut config_contents = String::new();
+    let config_file = fs::File::open("./config.toml");
+    match config_file {
+        Err(_) => panic!("No config.toml found."),
+        Ok(mut x) => {
+            x.read_to_string(&mut config_contents)?;
+        },
+    };
+    if config_contents.len() < 1 {
+        panic!("No config.toml found.")
+    }
+    let config : SiteConfig = toml::from_str(&config_contents).unwrap();
+
+    let default_site_baseurl = &config.baseurl;
+    let default_site_title = &config.title;
+
+    // initialize stuff
     let dir_static = "./static";
     let dir_public = "./public";
     let dir_content = "./content";
@@ -29,8 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-
-    // static files
+    // handle static files
     // @TODO sass
     for entry in WalkDir::new(dir_static)
             .into_iter()
@@ -49,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // figure out which sections we have
     let mut content_sections = vec![];
     for entry in WalkDir::new(dir_content)
             .into_iter()
@@ -64,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // markdown files
+    // handle markdown files
     for entry in WalkDir::new(dir_content)
             .into_iter()
             .filter_map(Result::ok) {
@@ -72,9 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if path0 == pc0 { continue; }
         let path = path0.strip_prefix(dir_content)?;
         if entry.file_type().is_dir() {
-            //println!("d:d: {} ", path.display());
-            //fs::create_dir_all(pp0.join(path))?;
-            //content_sections.push(path0);
             continue;
         }
         let fname = entry.file_name().to_str().unwrap();
@@ -82,11 +115,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        // @TODO read from config
+        // initialize new to avoid cached stuff
         let mut globals = Context::new();
-        globals.insert("Site_BaseUrl", "https://f5n.org");
-        globals.insert("Site_Title", "f5n dot org");
-        globals.insert("Site_Params_defaultDescription", "a website");
+        globals.insert("Site_BaseUrl", default_site_baseurl);
+        globals.insert("Site_Title", default_site_title);
 
         let mut tpl = "page.html".to_string();
         globals.insert("Template", &tpl);
@@ -101,37 +133,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if parts.len() < 3 {
             continue;
         }
-        let args : Vec<&str> = parts[1].split("\n").collect();
-        for line in args {
-            let pos : usize = match line.find('=') {
-                Some(x) => x,
-                None => 0,
-            };
-            if pos < 1 {
-                continue;
-            }
-            let mut arg = String::from(&line[0..1]);
-            arg = arg.to_uppercase();
-            arg.push_str(&line[1..pos].trim());
-            let val = &line[(pos+1)..].trim();
-            if arg == "Draft" && val == &"true" {
-                continue;
-            }
-            if arg == "Template" {
-                tpl = val.to_string();
-            }
-            globals.insert(arg, val);
-        }
 
+        // parse front matter
+        let value : FrontMatter = toml::from_str(parts[1]).unwrap();
+        let is_draft: bool = value.draft.unwrap_or(false);
+        if is_draft {
+            continue;
+        }
+        globals.insert("Date", &value.date);
+        match value.description {
+            None => (),
+            Some(x) => globals.insert("Description", &x),
+        }
+        globals.insert("Title", &value.title);
+        match value.template {
+            None => (),
+            Some(x) => tpl = x,
+        };
+
+        // count words for reading time
         let words : Vec<&str> = parts[2].split(" ").collect();
         let wc : usize = (words.len() / 200) + 1;
         globals.insert("ReadingTime", &wc);
 
+        // convert to markdown
         let parser = Parser::new(parts[2]);
         let mut html = String::new();
         html::push_html(&mut html, parser);
         globals.insert("content", &html);
 
+        // find out if a section template is needed
         for sec in &content_sections {
             let mut sc = String::from(sec);
             sc.push_str("/");
@@ -146,9 +177,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // @TODO DateFormat
+        // @TODO RSS
 
         let rv = tera.render(&tpl, &globals)?;
-
         let p1 = pp0.join(path).with_extension("html");
         println!("d:f: {}",p1.strip_prefix(pp0).unwrap().display());
         let mut ofile = fs::File::create(p1)?;
