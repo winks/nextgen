@@ -1,17 +1,15 @@
 extern crate pulldown_cmark;
-extern crate regex;
 extern crate serde;
 extern crate tera;
 extern crate walkdir;
 
 use pulldown_cmark::{Parser, html};
-use regex::Regex;
 use serde::Deserialize;
 use tera::{Context, Tera};
 use toml::value::Datetime;
 use walkdir::WalkDir;
 
-use std::{env, fs};
+use std::fs;
 use std::path::Path;
 use std::io::prelude::*;
 
@@ -31,6 +29,10 @@ struct FrontMatter {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // @TODO DateFormat
+    // @TODO RSS
+    // @TODO Section pages + template
+    // @TODO index
     // config file
     let mut config_contents = String::new();
     let config_file = fs::File::open("./config.toml");
@@ -166,7 +168,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for sec in &content_sections {
             let mut sc = String::from(sec);
             sc.push_str("/");
-            println!("x {} {} {:?}", path.display(), sc, path.starts_with(&sc));
             if path.starts_with(&sc) {
                 sc.replace_range(sc.len()-1.., "_");
                 sc.push_str(&tpl);
@@ -176,13 +177,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // @TODO DateFormat
-        // @TODO RSS
-
         let rv = tera.render(&tpl, &globals)?;
-        let p1 = pp0.join(path).with_extension("html");
-        println!("d:f: {}",p1.strip_prefix(pp0).unwrap().display());
-        let mut ofile = fs::File::create(p1)?;
+        let pd = pp0.join(path).with_extension("");
+        let pf = pd.join("index.html");
+        println!("d:f: {}",pf.strip_prefix(pp0).unwrap().display());
+        fs::create_dir_all(pd)?;
+        let mut ofile = fs::File::create(pf)?;
         ofile.write_all(&rv.trim().as_bytes())?;
     }
     Ok(())
