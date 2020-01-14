@@ -31,8 +31,8 @@ struct FrontMatter {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // @TODO DateFormat
     // @TODO RSS
-    // @TODO Section pages + template
-    // @TODO index
+    // @TODO sass and or other stuff to preprocess
+
     // config file
     let mut config_contents = String::new();
     let config_file = fs::File::open("./config.toml");
@@ -47,12 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let config : SiteConfig = toml::from_str(&config_contents).unwrap();
 
-    let default_site_baseurl = &config.baseurl;
-    let default_site_title = &config.title;
-
     // initialize stuff
-    let dir_static = "./static";
-    let dir_public = "./public";
+    let dir_static  = "./static";
+    let dir_public  = "./public";
     let dir_content = "./content";
 
     let ps0 = Path::new(dir_static);
@@ -68,7 +65,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // handle static files
-    // @TODO sass
     for entry in WalkDir::new(dir_static)
             .into_iter()
             .filter_map(|e| e.ok()) {
@@ -84,6 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("s:f: {} ", path.display());
             fs::copy(path0, pp0.join(path))?;
         }
+        // @TODO symlinks are ignored?
     }
 
     // figure out which sections we have
@@ -95,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if path0 == pc0 { continue; }
         if entry.file_type().is_dir() {
             let path = path0.strip_prefix(dir_content)?;
-            println!("d:d: {} ", path.display());
+            println!("d:d: {}", path.display());
             fs::create_dir_all(pp0.join(path))?;
             let x = path.to_str().unwrap();
             content_sections.push(String::from(x));
@@ -108,7 +105,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .filter_map(Result::ok) {
         let path0 = entry.path();
         if path0 == pc0 { continue; }
-        let path = path0.strip_prefix(dir_content)?;
         if entry.file_type().is_dir() {
             continue;
         }
@@ -116,18 +112,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !fname.ends_with(".md") {
             continue;
         }
+        let path = path0.strip_prefix(dir_content)?;
 
-        // initialize new to avoid cached stuff
-        let mut globals = Context::new();
-        globals.insert("Site_BaseUrl", default_site_baseurl);
-        globals.insert("Site_Title", default_site_title);
+        // initialize every time to avoid cached vars
+        let mut page_vars = Context::new();
+        page_vars.insert("Site_BaseUrl", &config.baseurl);
+        page_vars.insert("Site_Title", &config.title);
 
-        let mut tpl = "page.html".to_string();
-        globals.insert("Template", &tpl);
+        let mut page_section = String::new();
+        let mut page_tpl = "page.html".to_string();
+        page_vars.insert("Template", &page_tpl);
 
         //let metadata = entry.metadata()?;
         //let last_mod = metadata.modified()?.elapsed()?.as_secs();
-        //println!(": {} {:?}", path.display(), fname);
         let mut file = fs::File::open(path0)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
@@ -142,27 +139,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if is_draft {
             continue;
         }
-        globals.insert("Date", &value.date);
+        page_vars.insert("Date", &value.date);
         match value.description {
             None => (),
-            Some(x) => globals.insert("Description", &x),
+            Some(x) => page_vars.insert("Description", &x),
         }
-        globals.insert("Title", &value.title);
         match value.template {
             None => (),
-            Some(x) => tpl = x,
+            Some(x) => page_tpl = x,
         };
+        page_vars.insert("Title", &value.title);
 
         // count words for reading time
         let words : Vec<&str> = parts[2].split(" ").collect();
         let wc : usize = (words.len() / 200) + 1;
-        globals.insert("ReadingTime", &wc);
+        page_vars.insert("ReadingTime", &wc);
 
         // convert to markdown
         let parser = Parser::new(parts[2]);
         let mut html = String::new();
         html::push_html(&mut html, parser);
-        globals.insert("content", &html);
+        page_vars.insert("content", &html);
 
         // find out if a section template is needed
         for sec in &content_sections {
@@ -170,18 +167,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sc.push_str("/");
             if path.starts_with(&sc) {
                 sc.replace_range(sc.len()-1.., "_");
-                sc.push_str(&tpl);
-                tpl = sc;
-                globals.insert("Section", &sec);
+                if fname == "_index.md" {
+                    sc.push_str("index.html");
+                } else {
+                    sc.push_str(&page_tpl);
+                }
+                page_tpl = sc;
+                page_vars.insert("Section", &sec);
+                page_section = sec.to_string();
                 break;
             }
         }
 
-        let rv = tera.render(&tpl, &globals)?;
-        let pd = pp0.join(path).with_extension("");
-        let pf = pd.join("index.html");
-        println!("d:f: {}",pf.strip_prefix(pp0).unwrap().display());
-        fs::create_dir_all(pd)?;
+        let pf;
+        let pp1 = pp0.join(path);
+        if pp1.to_str().unwrap() == "./public/_index.md" {
+            // special case for the /index.html
+            pf = pp1.with_file_name("index.html");
+            page_tpl = "index.html".to_string();
+        } else if path.to_str().unwrap().ends_with("/_index.md") {
+            // use _index.md for a section's /section/index.html
+            pf = pp1.with_file_name("index.html");
+            page_tpl = page_section;
+            page_tpl.push_str("_index.html");
+        } else {
+            let pd = pp1.with_extension("");
+            pf = pd.join("index.html");
+            fs::create_dir_all(pd)?;
+        }
+        println!("d:f: {}", pf.strip_prefix(pp0).unwrap().display());
+        let rv = tera.render(&page_tpl, &page_vars)?;
         let mut ofile = fs::File::create(pf)?;
         ofile.write_all(&rv.trim().as_bytes())?;
     }
