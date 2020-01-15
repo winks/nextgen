@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate pulldown_cmark;
 extern crate serde;
 extern crate tera;
@@ -29,7 +30,6 @@ struct FrontMatter {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // @TODO DateFormat
     // @TODO RSS
     // @TODO sass and or other stuff to preprocess
 
@@ -139,7 +139,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if is_draft {
             continue;
         }
-        page_vars.insert("Date", &value.date);
+        let dtx = chrono::DateTime::parse_from_rfc3339(&value.date.to_string()).unwrap();
+        page_vars.insert("Date", &dtx.format("%a %b %d %Y").to_string());
         match value.description {
             None => (),
             Some(x) => page_vars.insert("Description", &x),

@@ -5,6 +5,7 @@ authors = ["Florian Anderiasch <fa@art-core.org>"]
 edition = "2018"
 
 [dependencies]
+chrono = "0.4.10"
 pulldown-cmark = "0.6.1"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5.5"
