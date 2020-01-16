@@ -4,7 +4,7 @@ extern crate serde;
 extern crate tera;
 extern crate walkdir;
 
-use chrono::DateTime;
+use chrono::{DateTime, SecondsFormat};
 use pulldown_cmark::{Parser, html};
 use serde::{Deserialize, Serialize};
 use tera::{Context, Tera, Value};
@@ -43,6 +43,8 @@ struct FrontMatter {
 struct ParsedPage {
     content: String,
     date: String,
+    dateshort: String,
+    year: String,
     link: String,
     section: String,
     section_index: bool,
@@ -232,9 +234,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ofile.write_all(&rv.trim().as_bytes())?;
         }
 
+        let dtx = DateTime::parse_from_rfc3339(&value.date.to_string()).unwrap();
         let parsed_page = ParsedPage {
             title: value.title,
-            date: value.date.to_string(),
+            date: dtx.to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
+            dateshort: dtx.format("%Y-%m-%d").to_string(),
+            year: dtx.format("%Y").to_string(),
             link: pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string(),
             content: html_from_md,
             section: page_section,
@@ -258,21 +263,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut prev_year = "0".to_string();
     for (sec, pp) in content_sections.iter_mut() {
         if pp.len() < 1 { continue; }
-        let mut out = String::new();
         (*pp).sort_by(|a, b| b.date.cmp(&a.date));
-        let mut idx = 0;
         let mut pi_tpl = String::new();
         let mut pi_vars = Context::new();
         // RSS/Atom
         let mut rss_vars = Context::new();
         rss_vars.insert("Site_BaseUrl", &config.baseurl);
-        rss_vars.insert("Site_Title", &config.title);
         rss_vars.insert("Site_Author_Name", &config.author.name);
+        // @TODO append
         rss_vars.insert("Title", &config.title);
-        rss_vars.insert("content", "foo");
         let mut rss_date = String::new();
         let mut rss_link = config.baseurl.clone();
         rss_link.push_str("/");
@@ -286,35 +287,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 //pi_vars = p.vars.clone();
                 pi_vars = Context::from_value(p.vars.clone()).unwrap();
                 continue;
-            }
-            if idx > 0 {
-                out.push_str("</ul>\n");
-            } else {
+            } else if rss_date.len() < 1 {
                 rss_date.push_str(&p.date);
             }
-            let yr = String::from(&p.date[0..4]);
-            if yr != prev_year {
-                out.push_str("\n<h3>");
-                out.push_str(&yr);
-                out.push_str("</h3>\n");
-                out.push_str("<ul class=\"posts\">\n");
-            }
-            let dtx = DateTime::parse_from_rfc3339(&p.date.to_string()).unwrap();
-            out.push_str(" <li>\n  <time class=\"pull-right post-list\">");
-            out.push_str(&dtx.format("%Y-%m-%d").to_string());
-            out.push_str("</time>\n  <span><a href=\"");
-            out.push_str(&config.baseurl);
-            out.push_str("/");
-            out.push_str(&p.link);
-            out.push_str("\">");
-            out.push_str(&p.title);
-            out.push_str("</a></span>\n </li>\n");
-            prev_year = yr;
-            idx += 1;
-        }
-        out.push_str("</ul>");
 
-        pi_vars.insert("content", &out);
+        }
+
+        pi_vars.insert("entries", &pp.clone());
         if pi_tpl.len() < 1 || pp0.join(pi_tpl.clone()).exists() {
             println!("Skipping {}, no section template.", sec);
             continue;
