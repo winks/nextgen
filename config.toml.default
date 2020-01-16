@@ -1,2 +1,6 @@
 baseurl = "https://example.org"
 title = "example website"
+rsslink = "/atom.xml"
+
+[author]
+    name = "John Doe"
