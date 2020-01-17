@@ -7,7 +7,7 @@ extern crate walkdir;
 use chrono::{DateTime, SecondsFormat};
 use pulldown_cmark::{Parser, html};
 use serde::{Deserialize, Serialize};
-use tera::{Context, Tera, Value};
+use tera::{Context, Tera};
 use toml::value;
 use walkdir::WalkDir;
 
@@ -16,7 +16,7 @@ use std::fs;
 use std::path::Path;
 use std::io::prelude::*;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SiteConfig {
     baseurl: String,
     title: String,
@@ -24,7 +24,7 @@ struct SiteConfig {
     author: SiteAuthor,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SiteAuthor {
     name: String,
 }
@@ -42,15 +42,38 @@ struct FrontMatter {
 #[derive(Serialize, Clone)]
 struct ParsedPage {
     content: String,
+    description: String,
     date: String,
+    datefull: String,
     dateshort: String,
     year: String,
     link: String,
+    readingtime: String,
+    rsslink: String,
     section: String,
     section_index: bool,
     template: String,
     title: String,
-    vars: Value,
+}
+
+impl ParsedPage {
+    fn new() -> ParsedPage {
+        ParsedPage {
+            content: String::new(),
+            description: String::new(),
+            date: String::new(),
+            datefull: String::new(),
+            dateshort: String::new(),
+            year: String::new(),
+            link: String::new(),
+            rsslink: String::new(),
+            readingtime: String::new(),
+            section: String::new(),
+            section_index: false,
+            template: String::new(),
+            title: String::new(),
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -87,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let mut parsed = vec![];
+    let mut all_parsed = vec![];
 
     // handle static files
     for entry in WalkDir::new(dir_static)
@@ -141,52 +164,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let path = path0.strip_prefix(dir_content)?;
 
         // initialize every time to avoid cached vars
+        let mut page = ParsedPage::new();
         let mut page_vars = Context::new();
-        page_vars.insert("Site_BaseUrl", &config.baseurl);
-        page_vars.insert("Site_Title", &config.title);
-
-        let mut page_section = String::new();
-        let mut page_tpl = "page.html".to_string();
-        page_vars.insert("Template", &page_tpl);
+        page_vars.insert("Site", &config);
 
         //let metadata = entry.metadata()?;
         //let last_mod = metadata.modified()?.elapsed()?.as_secs();
         let mut file = fs::File::open(path0)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let parts : Vec<&str> = contents.split("+++").collect();
+        file.read_to_string(&mut page.content)?;
+        let parts : Vec<&str> = page.content.split("+++").collect();
         if parts.len() < 3 {
             continue;
         }
 
         // parse front matter
-        let value : FrontMatter = toml::from_str(parts[1]).unwrap();
-        let is_draft: bool = value.draft.unwrap_or(false);
-        if is_draft {
-            continue;
-        }
-        let dtx = DateTime::parse_from_rfc3339(&value.date.to_string()).unwrap();
-        page_vars.insert("Date", &dtx.format("%a %b %d %Y").to_string());
-        match value.description {
-            None => (),
-            Some(x) => page_vars.insert("Description", &x),
-        }
-        match value.template {
-            None => (),
-            Some(x) => page_tpl = x,
-        };
-        page_vars.insert("Title", &value.title);
+        let value_fm : FrontMatter = toml::from_str(parts[1]).unwrap();
+        let dtx = DateTime::parse_from_rfc3339(&value_fm.date.to_string()).unwrap();
+        page.date = dtx.to_rfc3339_opts(SecondsFormat::Secs, true).to_string();
+        page.datefull = dtx.format("%a %b %d %Y").to_string();
+        page.dateshort = dtx.format("%Y-%m-%d").to_string();
+        page.year = dtx.format("%Y").to_string();
+        page.title = value_fm.title;
+        page.description = value_fm.description.unwrap_or(String::new());
+        page.template = "page.html".to_string();
 
         // count words for reading time
         let words : Vec<&str> = parts[2].split(" ").collect();
         let wc : usize = (words.len() / 200) + 1;
-        page_vars.insert("ReadingTime", &wc);
+        page.readingtime = wc.to_string();
 
         // convert to markdown
         let parser = Parser::new(parts[2]);
         let mut html_from_md = String::new();
         html::push_html(&mut html_from_md, parser);
-        page_vars.insert("content", &html_from_md);
+        page.content = html_from_md;
+
 
         // find out if a section template is needed
         for (sec, _) in content_sections.iter() {
@@ -197,11 +209,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if fname == "_index.md" {
                     sc.push_str("index.html");
                 } else {
-                    sc.push_str(&page_tpl);
+                    sc.push_str(&page.template);
                 }
-                page_tpl = sc;
-                page_vars.insert("Section", &sec);
-                page_section = sec.to_string();
+                page.template = sc;
+                page.section = sec.to_string();
                 break;
             }
         }
@@ -209,48 +220,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pf;
         let pp1 = pp0.join(path);
         let mut skip_write = false;
-        let mut section_index = false;
         if pp1.to_str().unwrap() == "./public/_index.md" {
             // special case for the /index.html
             pf = pp1.with_file_name("index.html");
-            page_tpl = "index.html".to_string();
-            page_section = "indexindex".to_string();
+            page.template = "index.html".to_string();
+            page.section = "indexindex".to_string();
         } else if path.to_str().unwrap().ends_with("/_index.md") {
             // use _index.md for a section's /section/index.html
             pf = pp1.with_file_name("index.html");
-            page_tpl = page_section.clone();
-            page_tpl.push_str("_index.html");
+            page.template = page.section.clone();
+            page.template.push_str("_index.html");
             skip_write = true;
-            section_index = true;
+            page.section_index = true;
+            page.rsslink = value_fm.rsslink.unwrap_or(String::new());
         } else {
+            if value_fm.draft.unwrap_or(false) { skip_write = true; }
             let pd = pp1.with_extension("");
             pf = pd.join("index.html");
             fs::create_dir_all(pd)?;
         }
+
+        page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
+        page_vars.insert("Page", &page);
         println!("d:f: {} {}", pf.strip_prefix(pp0).unwrap().display(), !skip_write);
         if !skip_write {
-            let rv = tera.render(&page_tpl, &page_vars)?;
+            let rv = tera.render(&page.template, &page_vars)?;
             let mut ofile = fs::File::create(pf.clone())?;
             ofile.write_all(&rv.trim().as_bytes())?;
         }
-
-        let dtx = DateTime::parse_from_rfc3339(&value.date.to_string()).unwrap();
-        let parsed_page = ParsedPage {
-            title: value.title,
-            date: dtx.to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
-            dateshort: dtx.format("%Y-%m-%d").to_string(),
-            year: dtx.format("%Y").to_string(),
-            link: pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string(),
-            content: html_from_md,
-            section: page_section,
-            template: page_tpl,
-            vars: page_vars.into_json(),
-            section_index: section_index,
-        };
-        parsed.push(parsed_page);
+        all_parsed.push(page);
     }
 
-    for p in parsed {
+    for p in all_parsed {
         if p.section == "indexindex" {
             // @TODO templating
             //println!("i {} {} {}", p.date, p.title, p.link);
@@ -270,27 +271,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut pi_vars = Context::new();
         // RSS/Atom
         let mut rss_vars = Context::new();
-        rss_vars.insert("Site_BaseUrl", &config.baseurl);
-        rss_vars.insert("Site_Author_Name", &config.author.name);
-        // @TODO append
-        rss_vars.insert("Title", &config.title);
+        let mut rss_title = config.title.clone();
         let mut rss_date = String::new();
         let mut rss_link = config.baseurl.clone();
-        rss_link.push_str("/");
-        rss_link.push_str(sec);
-        rss_link.push_str("/atom.xml");
-        rss_vars.insert("rsslink", &rss_link);
 
         for p in pp.clone() {
             if p.section_index {
                 pi_tpl = p.template.clone();
-                //pi_vars = p.vars.clone();
-                pi_vars = Context::from_value(p.vars.clone()).unwrap();
+                pi_vars = Context::new();
+                pi_vars.insert("Page", &p);
+                pi_vars.insert("Site", &config);
+                rss_title.push_str(" - ");
+                rss_title.push_str(&p.title);
+                if p.rsslink.len() > 0 {
+                    rss_link.push_str(&p.rsslink);
+                } else {
+                    rss_link.push_str(&config.rsslink);
+                }
                 continue;
             } else if rss_date.len() < 1 {
                 rss_date.push_str(&p.date);
             }
-
         }
 
         pi_vars.insert("entries", &pp.clone());
@@ -305,7 +306,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("d:f: {} i", pf.strip_prefix(pp0).unwrap().display());
 
         // RSS/Atom
+        rss_vars.insert("Site", &config);
+        rss_vars.insert("rsslink", &rss_link);
         rss_vars.insert("entries", &pp.clone());
+        rss_vars.insert("Title", &rss_title);
         rss_vars.insert("Date", &rss_date);
         let rss_tpl = "rss_page.html";
         let rv = tera.render(&rss_tpl, &rss_vars)?;
