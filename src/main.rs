@@ -110,8 +110,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let mut all_parsed = vec![];
-
     // handle static files
     for entry in WalkDir::new(dir_static)
             .into_iter()
@@ -133,6 +131,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // figure out which sections we have
     let mut content_sections = HashMap::new();
+    let sec_pages : Vec<ParsedPage> = Vec::new();
+    content_sections.insert(String::from("_index"), sec_pages.clone());
+    content_sections.insert(String::from("_default"), sec_pages.clone());
+    content_sections.insert(String::from("_pages"), sec_pages.clone());
     for entry in WalkDir::new(dir_content)
             .into_iter()
             .filter_map(Result::ok) {
@@ -143,8 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("d:d: {}", path.display());
             fs::create_dir_all(pp0.join(path))?;
             let sec_name = path.to_str().unwrap();
-            let sec_pages : Vec<ParsedPage> = Vec::new();
-            content_sections.insert(String::from(sec_name), sec_pages);
+            content_sections.insert(String::from(sec_name), sec_pages.clone());
         }
     }
 
@@ -199,7 +200,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         html::push_html(&mut html_from_md, parser);
         page.content = html_from_md;
 
-
         // find out if a section template is needed
         for (sec, _) in content_sections.iter() {
             let mut sc = String::from(sec);
@@ -224,7 +224,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // special case for the /index.html
             pf = pp1.with_file_name("index.html");
             page.template = "index.html".to_string();
-            page.section = "indexindex".to_string();
+            page.section = "_index".to_string();
+            skip_write = true;
         } else if path.to_str().unwrap().ends_with("/_index.md") {
             // use _index.md for a section's /section/index.html
             pf = pp1.with_file_name("index.html");
@@ -238,6 +239,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pd = pp1.with_extension("");
             pf = pd.join("index.html");
             fs::create_dir_all(pd)?;
+            if page.section.len() < 1 {
+                page.section = "_default".to_string();
+            }
         }
 
         page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
@@ -248,20 +252,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut ofile = fs::File::create(pf.clone())?;
             ofile.write_all(&rv.trim().as_bytes())?;
         }
-        all_parsed.push(page);
-    }
-
-    for p in all_parsed {
-        if p.section == "indexindex" {
-            // @TODO templating
-            //println!("i {} {} {}", p.date, p.title, p.link);
-        } else if p.section.len() > 0 {
-            content_sections.get_mut(&p.section).unwrap().push(p);
-        }
+        //all_parsed.push(page);
+        let psx = page.section.clone();
+        content_sections.get_mut(&psx).unwrap().push(page.clone());
+        content_sections.get_mut("_pages").unwrap().push(page);
     }
 
     for (sec, pp) in content_sections.iter_mut() {
-        if pp.len() < 1 { continue; }
+        if pp.len() < 1 || &sec[0..1] == "_" { continue; }
         (*pp).sort_by(|a, b| b.date.cmp(&a.date));
         // section index page
         let mut pi_tpl = String::new();
@@ -315,6 +313,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ofile.write_all(&rv.trim().as_bytes())?;
         println!("d:r: {}", pf.strip_prefix(pp0).unwrap().display());
     }
+
+    let index_page = &content_sections.get("_index").unwrap()[0].clone();
+    let pages = content_sections.get_mut("_pages").unwrap();
+    pages.sort_by(|a, b| b.date.cmp(&a.date));
+    let mut index_vars = Context::new();
+    index_vars.insert("Site", &config);
+    index_vars.insert("Page", &index_page);
+    index_vars.insert("entries", &pages.clone());
+    index_vars.insert("rsslink", &config.rsslink);
+    index_vars.insert("Title", &config.title);
+    let rv = tera.render("index.html", &index_vars)?;
+    let pf = pp0.join("index.html");
+    let mut ofile = fs::File::create(pf.clone())?;
+    ofile.write_all(&rv.trim().as_bytes())?;
+    println!("d:i: {}", pf.strip_prefix(pp0).unwrap().display());
 
     Ok(())
 }
