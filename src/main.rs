@@ -242,8 +242,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
         page_vars.insert("Page", &page);
-        println!("d:f: {} {}", pf.strip_prefix(pp0).unwrap().display(), !skip_write);
         if !skip_write {
+            println!("d:f: {}", pf.strip_prefix(pp0).unwrap().display());
             let rv = tera.render(&page.template, &page_vars)?;
             let mut ofile = fs::File::create(pf.clone())?;
             ofile.write_all(&rv.trim().as_bytes())?;
@@ -256,24 +256,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // @TODO templating
             //println!("i {} {} {}", p.date, p.title, p.link);
         } else if p.section.len() > 0 {
-            //if p.section_index { continue; }
-            //println!("{} _{}_ {} {}", p.date, p.title, p.link, p.template);
             content_sections.get_mut(&p.section).unwrap().push(p);
-        } else {
-            //println!("  {} {} {}", p.date, p.section, p.title);
         }
     }
 
     for (sec, pp) in content_sections.iter_mut() {
         if pp.len() < 1 { continue; }
         (*pp).sort_by(|a, b| b.date.cmp(&a.date));
+        // section index page
         let mut pi_tpl = String::new();
         let mut pi_vars = Context::new();
         // RSS/Atom
         let mut rss_vars = Context::new();
-        let mut rss_title = config.title.clone();
         let mut rss_date = String::new();
         let mut rss_link = config.baseurl.clone();
+        let mut rss_title = config.title.clone();
 
         for p in pp.clone() {
             if p.section_index {
@@ -295,26 +292,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         pi_vars.insert("entries", &pp.clone());
+        pi_vars.insert("rsslink", &rss_link);
         if pi_tpl.len() < 1 || pp0.join(pi_tpl.clone()).exists() {
-            println!("Skipping {}, no section template.", sec);
+            println!("Skipping index for '{}', no section template.", sec);
             continue;
         }
         let rv = tera.render(&pi_tpl, &pi_vars)?;
         let pf = pp0.join(sec).join("index.html");
         let mut ofile = fs::File::create(pf.clone())?;
         ofile.write_all(&rv.trim().as_bytes())?;
-        println!("d:f: {} i", pf.strip_prefix(pp0).unwrap().display());
+        println!("d:s: {} i", pf.strip_prefix(pp0).unwrap().display());
 
         // RSS/Atom
         rss_vars.insert("Site", &config);
-        rss_vars.insert("rsslink", &rss_link);
         rss_vars.insert("entries", &pp.clone());
-        rss_vars.insert("Title", &rss_title);
+        rss_vars.insert("rsslink", &rss_link);
         rss_vars.insert("Date", &rss_date);
-        let rss_tpl = "rss_page.html";
-        let rv = tera.render(&rss_tpl, &rss_vars)?;
-        // @TODO use rsslink
-        let pf = pp0.join(sec).join("atom.xml");
+        rss_vars.insert("Title", &rss_title);
+        let rv = tera.render("rss_page.html", &rss_vars)?;
+        let pf = pp0.join(&rss_link[config.baseurl.len()+1..]);
         let mut ofile = fs::File::create(pf.clone())?;
         ofile.write_all(&rv.trim().as_bytes())?;
         println!("d:r: {}", pf.strip_prefix(pp0).unwrap().display());
