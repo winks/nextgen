@@ -152,7 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let path = path0.strip_prefix(dir_content)?;
             println!("d:d: {}", path.display());
             fs::create_dir_all(pp0.join(path))?;
-            let sec_name = path.to_str().unwrap();
+            let sec_name = path.parent().unwrap().to_str().unwrap();
             content_sections.insert(String::from(sec_name), sec_pages.clone());
         }
     }
