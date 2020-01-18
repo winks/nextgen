@@ -76,6 +76,13 @@ impl ParsedPage {
     }
 }
 
+fn write(tera: &Tera, tpl: &str, vars: Context, msg: &str, pf: &Path, pp0: &Path) {
+    let rv = tera.render(tpl, &vars).unwrap();
+    let mut ofile = fs::File::create(pf.clone()).unwrap();
+    ofile.write_all(&rv.trim().as_bytes()).unwrap();
+    println!("{}: {}", msg, pf.strip_prefix(pp0).unwrap().display());
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // @TODO sass and or other stuff to preprocess
 
@@ -247,10 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
         page_vars.insert("Page", &page);
         if !skip_write {
-            println!("d:f: {}", pf.strip_prefix(pp0).unwrap().display());
-            let rv = tera.render(&page.template, &page_vars)?;
-            let mut ofile = fs::File::create(pf.clone())?;
-            ofile.write_all(&rv.trim().as_bytes())?;
+            write(&tera, &page.template, page_vars, "d:f", &pf, pp0);
         }
         //all_parsed.push(page);
         let psx = page.section.clone();
@@ -295,11 +299,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Skipping index for '{}', no section template.", sec);
             continue;
         }
-        let rv = tera.render(&pi_tpl, &pi_vars)?;
-        let pf = pp0.join(sec).join("index.html");
-        let mut ofile = fs::File::create(pf.clone())?;
-        ofile.write_all(&rv.trim().as_bytes())?;
-        println!("d:s: {} i", pf.strip_prefix(pp0).unwrap().display());
+        write(&tera, &pi_tpl, pi_vars, "d:s", &pp0.join(sec).join("index.html"), pp0);
 
         // RSS/Atom
         rss_vars.insert("Site", &config);
@@ -307,11 +307,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rss_vars.insert("rsslink", &rss_link);
         rss_vars.insert("Date", &rss_date);
         rss_vars.insert("Title", &rss_title);
-        let rv = tera.render("rss_page.html", &rss_vars)?;
-        let pf = pp0.join(&rss_link[config.baseurl.len()+1..]);
-        let mut ofile = fs::File::create(pf.clone())?;
-        ofile.write_all(&rv.trim().as_bytes())?;
-        println!("d:r: {}", pf.strip_prefix(pp0).unwrap().display());
+        write(&tera, "rss_page.html", rss_vars, "d:r", &pp0.join(&rss_link[config.baseurl.len()+1..]), pp0);
     }
 
     let index_page = &content_sections.get("_index").unwrap()[0].clone();
@@ -323,11 +319,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     index_vars.insert("entries", &pages.clone());
     index_vars.insert("rsslink", &config.rsslink);
     index_vars.insert("Title", &config.title);
-    let rv = tera.render("index.html", &index_vars)?;
-    let pf = pp0.join("index.html");
-    let mut ofile = fs::File::create(pf.clone())?;
-    ofile.write_all(&rv.trim().as_bytes())?;
-    println!("d:i: {}", pf.strip_prefix(pp0).unwrap().display());
+    write(&tera, "index.html", index_vars, "d:i", &pp0.join("index.html"), pp0);
 
     Ok(())
 }
