@@ -104,12 +104,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir_static  = "./static";
     let dir_public  = "./public";
     let dir_content = "./content";
+    let dir_theme   = "theme";
 
     let ps0 = Path::new(dir_static);
     let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
 
-    let tera = match Tera::new("theme/**/*.html") {
+    let tera = match Tera::new(&(dir_theme.to_owned() + "/**/*.html")) {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
@@ -256,7 +257,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !skip_write {
             write(&tera, &page.template, page_vars, "d:f", &pf, pp0);
         }
-        //all_parsed.push(page);
         let psx = page.section.clone();
         content_sections.get_mut(&psx).unwrap().push(page.clone());
         content_sections.get_mut("_pages").unwrap().push(page);
@@ -320,6 +320,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     index_vars.insert("rsslink", &config.rsslink);
     index_vars.insert("Title", &config.title);
     write(&tera, "index.html", index_vars, "d:i", &pp0.join("index.html"), pp0);
+
+    let mut rss_index_vars = Context::new();
+    rss_index_vars.insert("Site", &config);
+    rss_index_vars.insert("entries", &pages.clone());
+    rss_index_vars.insert("rsslink", &config.rsslink);
+    rss_index_vars.insert("Title", &config.title);
+    rss_index_vars.insert("Date", &pages[0].date);
+    write(&tera, "rss_page.html", rss_index_vars, "d:r", &pp0.join(&config.rsslink[1..]), pp0);
 
     Ok(())
 }
