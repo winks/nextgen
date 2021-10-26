@@ -14,6 +14,7 @@ use walkdir::WalkDir;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::time::SystemTime;
 use std::io::prelude::*;
 
 #[derive(Deserialize, Serialize)]
@@ -76,15 +77,48 @@ impl ParsedPage {
     }
 }
 
-fn write(tera: &Tera, tpl: &str, vars: Context, msg: &str, pf: &Path, pp0: &Path) {
+struct Stats {
+    pages: u32,
+    files: u32,
+    templates: usize,
+    sections: u32,
+    rss: u32,
+}
+
+impl Stats {
+    fn new() -> Stats {
+        Stats {
+            pages: 0,
+            files: 0,
+            templates: 0,
+            sections: 0,
+            rss: 0,
+        }
+    }
+    fn print(&self) {
+        println!("+-------------+-----+");
+        println!("Pages         | {}", self.pages);
+        println!("Section files | {}", self.sections);
+        println!("RSS files     | {}", self.rss);
+        println!("Static files  | {}", self.files);
+        println!("Templates     | {}", self.templates);
+        println!("");
+    }
+}
+
+fn write(tera: &Tera, tpl: &str, vars: Context, msg: &str, pf: &Path, pp0: &Path, verb: bool) {
+    if verb {
+        println!("{}: {:?} {}", msg, pp0, pf.strip_prefix(pp0).unwrap().display());
+    }
     let rv = tera.render(tpl, &vars).unwrap();
     let mut ofile = fs::File::create(pf.clone()).unwrap();
     ofile.write_all(&rv.trim().as_bytes()).unwrap();
-    println!("{}: {}", msg, pf.strip_prefix(pp0).unwrap().display());
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // @TODO sass and or other stuff to preprocess
+    let time_start = SystemTime::now();
+    let mut stats = Stats::new();
+    let verbose = false;
 
     // config file
     let mut config_contents = String::new();
@@ -104,19 +138,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir_static  = "./static";
     let dir_public  = "./public";
     let dir_content = "./content";
-    let dir_theme   = "theme";
+    //let dir_theme   = "./theme";
 
     let ps0 = Path::new(dir_static);
     let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
 
-    let tera = match Tera::new(&(dir_theme.to_owned() + "/**/*.html")) {
+    //let tera = match Tera::new(&(dir_theme.to_owned() + "/**/*.html")) {
+    let tera = match Tera::new("theme/**/*.html") {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
             panic!();
         }
     };
+    stats.templates = tera.templates.len();
 
     // handle static files
     for entry in WalkDir::new(dir_static)
@@ -131,8 +167,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fs::create_dir_all(pp0.join(path))?;
         }
         if entry.file_type().is_file() {
-            println!("s:f: {} ", path.display());
+            if verbose {
+                println!("s:f: {} ", path.display());
+            }
             fs::copy(path0, pp0.join(path))?;
+            stats.files = stats.files + 1;
         }
         // @TODO symlinks are ignored?
     }
@@ -150,7 +189,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if path0 == pc0 { continue; }
         if entry.file_type().is_dir() {
             let path = path0.strip_prefix(dir_content)?;
-            println!("d:d: {}", path.display());
+            if verbose {
+                println!("d:d: {}", path.display());
+            }
             fs::create_dir_all(pp0.join(path))?;
             let sec_name = path.parent().unwrap().to_str().unwrap();
             content_sections.insert(String::from(sec_name), sec_pages.clone());
@@ -242,6 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             skip_write = true;
             page.section_index = true;
             page.rsslink = value_fm.rsslink.unwrap_or(String::new());
+            // println!("PR1 {} {}", page.title, page.rsslink);
         } else {
             if value_fm.draft.unwrap_or(false) { skip_write = true; }
             let pd = pp1.with_extension("");
@@ -255,7 +297,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
         page_vars.insert("Page", &page);
         if !skip_write {
-            write(&tera, &page.template, page_vars, "d:f", &pf, pp0);
+            write(&tera, &page.template, page_vars, "d:f", &pf, pp0, verbose);
+            stats.pages = stats.pages + 1;
         }
         let psx = page.section.clone();
         content_sections.get_mut(&psx).unwrap().push(page.clone());
@@ -287,6 +330,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     rss_link.push_str(&config.rsslink);
                 }
+                // println!("PR {} {} {}", p.title, p.rsslink, rss_link);
                 continue;
             } else if rss_date.len() < 1 {
                 rss_date.push_str(&p.date);
@@ -299,7 +343,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Skipping index for '{}', no section template.", sec);
             continue;
         }
-        write(&tera, &pi_tpl, pi_vars, "d:s", &pp0.join(sec).join("index.html"), pp0);
+        write(&tera, &pi_tpl, pi_vars, "d:s", &pp0.join(sec).join("index.html"), pp0, verbose);
+        stats.sections = stats.sections + 1;
 
         // RSS/Atom
         rss_vars.insert("Site", &config);
@@ -307,19 +352,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rss_vars.insert("rsslink", &rss_link);
         rss_vars.insert("Date", &rss_date);
         rss_vars.insert("Title", &rss_title);
-        write(&tera, "rss_page.html", rss_vars, "d:r", &pp0.join(&rss_link[config.baseurl.len()+1..]), pp0);
+        // println!("RR {}", rss_link);
+        write(&tera, "rss_page.html", rss_vars, "d:r", &pp0.join(&rss_link[config.baseurl.len()+1..]), pp0, verbose);
+        stats.rss = stats.rss + 1;
     }
 
-    let index_page = &content_sections.get("_index").unwrap()[0].clone();
-    let pages = content_sections.get_mut("_pages").unwrap();
-    pages.sort_by(|a, b| b.date.cmp(&a.date));
     let mut index_vars = Context::new();
     index_vars.insert("Site", &config);
-    index_vars.insert("Page", &index_page);
+
+    if content_sections.contains_key("_index") {
+        match &content_sections.get("_index") {
+            None => {},
+            Some(csi) => {
+                if csi.len() > 0 {
+                    index_vars.insert("Page", &csi[0].clone());
+                }
+            }
+        }
+    }
+    let pages = content_sections.get_mut("_pages").unwrap();
+    pages.sort_by(|a, b| b.date.cmp(&a.date));
+
     index_vars.insert("entries", &pages.clone());
     index_vars.insert("rsslink", &config.rsslink);
     index_vars.insert("Title", &config.title);
-    write(&tera, "index.html", index_vars, "d:i", &pp0.join("index.html"), pp0);
+    write(&tera, "index.html", index_vars, "d:i", &pp0.join("index.html"), pp0, verbose);
 
     let mut rss_index_vars = Context::new();
     rss_index_vars.insert("Site", &config);
@@ -327,7 +384,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rss_index_vars.insert("rsslink", &config.rsslink);
     rss_index_vars.insert("Title", &config.title);
     rss_index_vars.insert("Date", &pages[0].date);
-    write(&tera, "rss_page.html", rss_index_vars, "d:r", &pp0.join(&config.rsslink[1..]), pp0);
+    write(&tera, "rss_page.html", rss_index_vars, "d:r", &pp0.join(&config.rsslink[1..]), pp0, verbose);
+
+    stats.print();
+    match time_start.elapsed() {
+        Ok(elapsed) => println!("Took {} msecs.", elapsed.as_millis()),
+        Err(e) => println!("Err: {:?}", e),
+    }
 
     Ok(())
 }
