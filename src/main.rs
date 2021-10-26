@@ -102,7 +102,7 @@ impl Stats {
         println!("RSS files     | {}", self.rss);
         println!("Static files  | {}", self.files);
         println!("Templates     | {}", self.templates);
-        println!("");
+        println!();
     }
 }
 
@@ -111,8 +111,8 @@ fn write(tera: &Tera, tpl: &str, vars: Context, msg: &str, pf: &Path, pp0: &Path
         println!("{}: {:?} {}", msg, pp0, pf.strip_prefix(pp0).unwrap().display());
     }
     let rv = tera.render(tpl, &vars).unwrap();
-    let mut ofile = fs::File::create(pf.clone()).unwrap();
-    ofile.write_all(&rv.trim().as_bytes()).unwrap();
+    let mut ofile = fs::File::create(pf).unwrap();
+    ofile.write_all(rv.trim().as_bytes()).unwrap();
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -129,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             x.read_to_string(&mut config_contents)?;
         },
     };
-    if config_contents.len() < 1 {
+    if config_contents.is_empty() {
         panic!("No config.toml found.")
     }
     let config : SiteConfig = toml::from_str(&config_contents).unwrap();
@@ -163,7 +163,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let path = path0.strip_prefix(dir_static)?;
 
         if entry.file_type().is_dir() {
-            println!("s:d: {} ", path.display());
+            if verbose {
+                println!("s:d: {} ", path.display());
+            }
             fs::create_dir_all(pp0.join(path))?;
         }
         if entry.file_type().is_file() {
@@ -171,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("s:f: {} ", path.display());
             }
             fs::copy(path0, pp0.join(path))?;
-            stats.files = stats.files + 1;
+            stats.files += 1;
         }
         // @TODO symlinks are ignored?
     }
@@ -235,12 +237,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.dateshort = dtx.format("%Y-%m-%d").to_string();
         page.year = dtx.format("%Y").to_string();
         page.title = value_fm.title;
-        page.description = value_fm.description.unwrap_or(String::new());
+        page.description = value_fm.description.unwrap_or_default();
         page.template = "page.html".to_string();
 
         // count words for reading time
-        let words : Vec<&str> = parts[2].split(" ").collect();
-        let wc : usize = (words.len() / 200) + 1;
+        let wc : usize = (parts[2].split(' ').count() / 200) + 1;
         page.readingtime = wc.to_string();
 
         // convert to markdown
@@ -252,7 +253,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // find out if a section template is needed
         for (sec, _) in content_sections.iter() {
             let mut sc = String::from(sec);
-            sc.push_str("/");
+            sc.push('/');
             if path.starts_with(&sc) {
                 sc.replace_range(sc.len()-1.., "_");
                 if fname == "_index.md" {
@@ -282,14 +283,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             page.template.push_str("_index.html");
             skip_write = true;
             page.section_index = true;
-            page.rsslink = value_fm.rsslink.unwrap_or(String::new());
+            page.rsslink = value_fm.rsslink.unwrap_or_default();
             // println!("PR1 {} {}", page.title, page.rsslink);
         } else {
             if value_fm.draft.unwrap_or(false) { skip_write = true; }
             let pd = pp1.with_extension("");
             pf = pd.join("index.html");
             fs::create_dir_all(pd)?;
-            if page.section.len() < 1 {
+            if page.section.is_empty() {
                 page.section = "_default".to_string();
             }
         }
@@ -298,7 +299,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page_vars.insert("Page", &page);
         if !skip_write {
             write(&tera, &page.template, page_vars, "d:f", &pf, pp0, verbose);
-            stats.pages = stats.pages + 1;
+            stats.pages += 1;
         }
         let psx = page.section.clone();
         content_sections.get_mut(&psx).unwrap().push(page.clone());
@@ -306,7 +307,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for (sec, pp) in content_sections.iter_mut() {
-        if pp.len() < 1 || &sec[0..1] == "_" { continue; }
+        if pp.is_empty() || &sec[0..1] == "_" { continue; }
         (*pp).sort_by(|a, b| b.date.cmp(&a.date));
         // section index page
         let mut pi_tpl = String::new();
@@ -325,26 +326,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pi_vars.insert("Site", &config);
                 rss_title.push_str(" - ");
                 rss_title.push_str(&p.title);
-                if p.rsslink.len() > 0 {
+                if !p.rsslink.is_empty() {
                     rss_link.push_str(&p.rsslink);
                 } else {
                     rss_link.push_str(&config.rsslink);
                 }
                 // println!("PR {} {} {}", p.title, p.rsslink, rss_link);
                 continue;
-            } else if rss_date.len() < 1 {
+            } else if rss_date.is_empty() {
                 rss_date.push_str(&p.date);
             }
         }
 
         pi_vars.insert("entries", &pp.clone());
         pi_vars.insert("rsslink", &rss_link);
-        if pi_tpl.len() < 1 || pp0.join(pi_tpl.clone()).exists() {
+        if pi_tpl.is_empty() || pp0.join(pi_tpl.clone()).exists() {
             println!("Skipping index for '{}', no section template.", sec);
             continue;
         }
         write(&tera, &pi_tpl, pi_vars, "d:s", &pp0.join(sec).join("index.html"), pp0, verbose);
-        stats.sections = stats.sections + 1;
+        stats.sections += 1;
 
         // RSS/Atom
         rss_vars.insert("Site", &config);
@@ -354,7 +355,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rss_vars.insert("Title", &rss_title);
         // println!("RR {}", rss_link);
         write(&tera, "rss_page.html", rss_vars, "d:r", &pp0.join(&rss_link[config.baseurl.len()+1..]), pp0, verbose);
-        stats.rss = stats.rss + 1;
+        stats.rss += 1;
     }
 
     let mut index_vars = Context::new();
@@ -364,7 +365,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match &content_sections.get("_index") {
             None => {},
             Some(csi) => {
-                if csi.len() > 0 {
+                if !csi.is_empty() {
                     index_vars.insert("Page", &csi[0].clone());
                 }
             }
