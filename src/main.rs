@@ -122,15 +122,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // config file
     let mut config_contents = String::new();
-    let config_file = fs::File::open("./config.toml");
+    let config_file = fs::File::open("./nextgen.toml");
     match config_file {
-        Err(_) => panic!("No config.toml found."),
+        Err(_) => panic!("No nextgen.toml found."),
         Ok(mut x) => {
             x.read_to_string(&mut config_contents)?;
         },
     };
     if config_contents.is_empty() {
-        panic!("No config.toml found.")
+        panic!("Empty nextgen.toml found.")
     }
     let config : SiteConfig = toml::from_str(&config_contents).unwrap();
 
@@ -145,7 +145,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pc0 = Path::new(dir_content);
 
     //let tera = match Tera::new(&(dir_theme.to_owned() + "/**/*.html")) {
-    let tera = match Tera::new("theme/**/*.html") {
+    let tera = match Tera::new("theme/templates/**/*.html") {
+        Ok(t) => t,
+        Err(e) => {
+            println!("Parsing error(s): {}", e);
+            panic!();
+        }
+    };
+    let mut tera_macro = match Tera::new("theme/macros/**/*.html") {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
@@ -245,7 +252,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.readingtime = wc.to_string();
 
         // convert to markdown
-        let parser = Parser::new(parts[2]);
+        let tpl_path_macro = path0.to_str().unwrap();
+        let body_tmp = String::new() + "{% import \"macros.html\" as macros %}" + parts[2];
+        tera_macro.add_raw_template(tpl_path_macro, &body_tmp).unwrap();
+        let tmp_md = tera_macro.render(tpl_path_macro, &Context::new()).unwrap();
+        let parser = Parser::new(&tmp_md);
         let mut html_from_md = String::new();
         html::push_html(&mut html_from_md, parser);
         page.content = html_from_md;
