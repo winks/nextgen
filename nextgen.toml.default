@@ -1,6 +1,7 @@
 baseurl = "https://example.org"
 title = "example website"
 rsslink = "/atom.xml"
+blueprint = "blueprint_dir/subdir"
 
 [author]
     name = "John Doe"

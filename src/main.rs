@@ -22,6 +22,7 @@ struct SiteConfig {
     baseurl: String,
     title: String,
     rsslink: String,
+    blueprint: String,
     author: SiteAuthor,
 }
 
@@ -138,21 +139,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir_static  = "./static";
     let dir_public  = "./public";
     let dir_content = "./content";
-    //let dir_theme   = "./theme";
+    let dir_bprint  = config.blueprint.clone();
 
     let ps0 = Path::new(dir_static);
     let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
 
-    //let tera = match Tera::new(&(dir_theme.to_owned() + "/**/*.html")) {
-    let tera = match Tera::new("theme/templates/**/*.html") {
+    let tera = match Tera::new(&(dir_bprint.to_owned() + "/templates/**/*.html")) {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
             panic!();
         }
     };
-    let mut tera_macro = match Tera::new("theme/macros/**/*.html") {
+    let mut tera_macro = match Tera::new(&(dir_bprint.to_owned() + "/macros/**/*.html")) {
         Ok(t) => t,
         Err(e) => {
             println!("Parsing error(s): {}", e);
