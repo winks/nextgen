@@ -24,6 +24,7 @@ struct SiteConfig {
     rsslink: String,
     blueprint: String,
     author: SiteAuthor,
+    verbose: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -38,7 +39,6 @@ struct FrontMatter {
     draft: Option<bool>,
     title: String,
     rsslink: Option<String>,
-    template: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -119,7 +119,6 @@ fn write(tera: &Tera, tpl: &str, vars: Context, msg: &str, pf: &Path, pp0: &Path
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let time_start = SystemTime::now();
     let mut stats = Stats::new();
-    let verbose = false;
 
     // config file
     let mut config_contents = String::new();
@@ -134,16 +133,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("Empty nextgen.toml found.")
     }
     let config : SiteConfig = toml::from_str(&config_contents).unwrap();
+    let verbose = config.verbose.unwrap_or(false);
 
     // initialize stuff
     let dir_static  = "./static";
     let dir_public  = "./public";
     let dir_content = "./content";
     let dir_bprint  = config.blueprint.clone();
+    let dir_bp_static = dir_bprint.to_owned() + "/static";
 
     let ps0 = Path::new(dir_static);
     let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
+    let t0x = &(dir_bp_static.clone());
+    let ps01 = Path::new(t0x);
 
     let tera = match Tera::new(&(dir_bprint.to_owned() + "/templates/**/*.html")) {
         Ok(t) => t,
@@ -180,6 +183,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("s:f: {} ", path.display());
             }
             fs::copy(path0, pp0.join(path))?;
+            stats.files += 1;
+        }
+        // @TODO symlinks are ignored?
+    }
+    for entry in WalkDir::new(dir_bp_static.clone())
+            .into_iter()
+            .filter_map(|e| e.ok()) {
+        let path01 = entry.path();
+        if path01 == ps01 { continue; }
+        let path = path01.strip_prefix(dir_bp_static.clone())?;
+
+        if entry.file_type().is_dir() {
+            if verbose {
+                println!("s:d: {} ", path.display());
+            }
+            fs::create_dir_all(pp0.join(path))?;
+        }
+        if entry.file_type().is_file() {
+            if verbose {
+                println!("s:f: {} ", path.display());
+            }
+            fs::copy(path01, pp0.join(path))?;
             stats.files += 1;
         }
         // @TODO symlinks are ignored?
@@ -238,6 +263,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // parse front matter
         let value_fm : FrontMatter = toml::from_str(parts[1]).unwrap();
+        if value_fm.draft.unwrap_or(false) {
+            continue;
+        }
         let dtx = DateTime::parse_from_rfc3339(&value_fm.date.to_string()).unwrap();
         page.date = dtx.to_rfc3339_opts(SecondsFormat::Secs, true).to_string();
         page.datefull = dtx.format("%a %b %d %Y").to_string();
@@ -297,7 +325,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             page.rsslink = value_fm.rsslink.unwrap_or_default();
             // println!("PR1 {} {}", page.title, page.rsslink);
         } else {
-            if value_fm.draft.unwrap_or(false) { skip_write = true; }
             let pd = pp1.with_extension("");
             pf = pd.join("index.html");
             fs::create_dir_all(pd)?;

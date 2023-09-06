@@ -10,9 +10,6 @@ Inspired by hugo, incentivised by hugo's too many features.
 Have a somewhat current version of stable Rust, 1.61.0 works fine.
 
 ```
-# get a theme
-git clone https://github.com/winks/nextgen-themes
-ln -s nextgen-themes/f5n.org theme
 ```
 
 ```
@@ -21,6 +18,10 @@ cargo build --release
 
 # build the example site
 cd example
+
+# get a blueprint
+git clone https://github.com/winks/nextgen-blueprints blueprints
+
 ./target/release/nextgen
 
 # or run your own
@@ -29,6 +30,13 @@ mkdir {content,public}
 cp -r example/theme .
 ./target/release/nextgen
 ```
+
+## Gotchas
+
+  * blueprints folder may not be a symlink
+  * no cli args
+  * panic on error
+
 
 ## History
 
