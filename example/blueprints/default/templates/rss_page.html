@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>{{ Title }}</title>
+  <link href="{{ rsslink |safe }}" rel="self"/>
+  <link href="{{ Site.baseurl | safe }}"/>
+  <updated>{{ Date }}</updated>
+  <id>{{ Site.baseurl | safe }}</id>
+{% for entry in entries %}
+{%- if not entry.section_index %}
+<entry>
+ <title>{{ entry.title }}</title>
+ <author><name>{{ Site.author.name }}</name></author>
+ <link href="{{ Site.baseurl | safe }}/{{ entry.link | safe }}"/>
+ <id>{{ Site.baseurl | safe }}/{{ entry.link | safe }}</id>
+ <published>{{ entry.date | safe }}</published>
+ <updated>{{ entry.date | safe }}</updated>
+ <content type="html">{{ entry.content }}</content>
+</entry>
+
+{%- endif -%}
+{% endfor %}
+</feed>

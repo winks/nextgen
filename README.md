@@ -7,10 +7,8 @@ Inspired by hugo, incentivised by hugo's too many features.
 
 ## How to build
 
-Have a somewhat current version of stable Rust, 1.61.0 works fine.
+Have a somewhat current version of stable Rust, 1.72.0 works fine.
 
-```
-```
 
 ```
 # build and run
@@ -19,21 +17,25 @@ cargo build --release
 # build the example site
 cd example
 
-# get a blueprint
+# optionally, get a different blueprint:
+mv blueprints blueprints.example
 git clone https://github.com/winks/nextgen-blueprints blueprints
 
-./target/release/nextgen
+../target/release/nextgen
 
 # or run your own
-cp ../nextgen.toml.default nextgen.toml
-mkdir {content,public}
-cp -r example/theme .
-./target/release/nextgen
+mkdir newsite
+cd newsite
+cp ../nextgen.toml.default ./nextgen.toml
+mkdir content
+cp -r ../example/blueprints .
+cp ../example/content/_index.md content/
+../target/release/nextgen
 ```
 
 ## Gotchas
 
-  * blueprints folder may not be a symlink
+  * blueprints folder must not be a symlink
   * no cli args
   * panic on error
 

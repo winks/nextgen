@@ -1,0 +1,7 @@
+{% macro figure(src, title, alt="") %}
+<figure>
+  <img src="{{src}}" alt="
+  {%- if alt == "" -%}{{ title }}{%- else -%}{{alt}}{%- endif -%}"/>
+  <figcaption><h4>{{title}}</h4></figcaption>
+</figure>
+{% endmacro figure %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Special page: {{ Page.title | safe }}</h2>
+
+[This is the index page template]
+
+{%- set idx = 0 -%}
+{% for entry in entries %}
+{%- if entry.section_index %}{% continue %}{% endif %}
+{%- if entry.section == "blog" or entry.section == "stack" -%}
+{% if idx == 10 %}{% break %}{% endif %}
+      <li><time class="pull-right post-list">{{ entry.dateshort }}</time>
+      <a href="/{{ entry.link | safe }}">{{ entry.title }}</a></li>
+{%- set_global idx = idx + 1 -%}
+{%- endif -%}
+{% endfor %}
+
+{% endblock content %}

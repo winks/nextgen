@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Special page: {{ Page.title | safe }}</h2>
+
+[This is the blog index page template]
+
+{%- set_global prev_year = "0" -%}
+{%- set_global is_first_list = true -%}
+{% for entry in entries %}
+{%- if not entry.section_index -%}
+{% if entry.year != prev_year -%}
+{% if not is_first_list %}
+</ul>
+{% endif -%}
+
+<h3>{{ entry.year }}</h3>
+<ul class="posts">
+{% endif %}
+ <li>
+  <time>{{ entry.dateshort }}</time><br>
+  <span><a href="/{{ entry.link | safe }}">{{ entry.title }}</a></span><br>
+ </li>
+
+{%- set_global prev_year = entry.year -%}
+{%- set_global is_first_list = false -%}
+{%- endif -%}
+{% endfor %}
+</ul>
+
+
+{% endblock content %}

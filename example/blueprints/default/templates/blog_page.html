@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>Blog page: {{ Page.title }}</h2>
+  <span>{{ Page.datefull }}<br />{{ Page.readingtime }} minute read</span>
+
+
+<div>
+{{ Page.content | safe }}
+</div>
+
+{% endblock content %}
