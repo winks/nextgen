@@ -8,5 +8,11 @@
 <div>
 {{ Page.content | safe }}
 </div>
+<p>
+  Tags:
+  {% for tag in Page.tags %}
+  <a href="/tags/{{ tag }}">{{ tag }}</a>&nbsp;
+  {% endfor %}
+</p>
 
 {% endblock content %}

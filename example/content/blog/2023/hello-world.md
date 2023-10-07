@@ -2,6 +2,7 @@
 draft = false
 title = "Hello World"
 date = 2023-09-06T19:21:00Z
+tags = ["hello", "world"]
 +++
 
 Hello, World!
