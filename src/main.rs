@@ -39,6 +39,7 @@ struct FrontMatter {
     draft: Option<bool>,
     title: String,
     rsslink: Option<String>,
+    tags: Option<value::Array>,
 }
 
 #[derive(Serialize, Clone)]
@@ -56,6 +57,7 @@ struct ParsedPage {
     section_index: bool,
     template: String,
     title: String,
+    tags: Vec<String>,
 }
 
 impl ParsedPage {
@@ -74,6 +76,7 @@ impl ParsedPage {
             section_index: false,
             template: String::new(),
             title: String::new(),
+            tags: Vec::new(),
         }
     }
 }
@@ -280,6 +283,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.title = value_fm.title;
         page.description = value_fm.description.unwrap_or_default();
         page.template = "page.html".to_string();
+        let tags = value_fm.tags.unwrap_or_default();
+        if !tags.is_empty() {
+            page.tags = tags.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+        }
 
         // count words for reading time
         let wc : usize = (parts[2].split(' ').count() / 200) + 1;
