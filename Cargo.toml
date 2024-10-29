@@ -5,11 +5,11 @@ authors = ["Florian Anderiasch <fa@art-core.org>"]
 edition = "2018"
 
 [dependencies]
-chrono = "0.4.29"
-pulldown-cmark = "0.9.3"
-serde = { version = "1.0.171", features = ["derive"] }
-toml = "0.7.6"
-walkdir = "2.4.0"
+chrono = "0.4.38"
+pulldown-cmark = "0.12.2"
+serde = { version = "1.0.214", features = ["derive"] }
+toml = "0.8.19"
+walkdir = "2.5.0"
 
 [dependencies.tera]
 version = "1.19.1"
