@@ -137,16 +137,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // initialize stuff
     let dir_static  = "./static";
-    let dir_public  = "./public";
     let dir_content = "./content";
+    let dir_public  = "./public";
     let dir_bprint  = config.blueprint.clone();
     let dir_bp_static = dir_bprint.to_owned() + "/static";
 
     let ps0 = Path::new(dir_static);
-    let pp0 = Path::new(dir_public);
     let pc0 = Path::new(dir_content);
     let t0x = &(dir_bp_static.clone());
     let ps01 = Path::new(t0x);
+    let pp0 = Path::new(dir_public);
+    match fs::create_dir_all(&pp0) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Could not create output directory {}: {}", pp0.display(), e)
+        }
+    };
 
     let tera = match Tera::new(&(dir_bprint.to_owned() + "/templates/**/*.html")) {
         Ok(t) => t,
