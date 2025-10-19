@@ -1,16 +1,16 @@
 [package]
 name = "nextgen"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Florian Anderiasch <fa@art-core.org>"]
 edition = "2018"
 
 [dependencies]
-chrono = "0.4.38"
-pulldown-cmark = "0.12.2"
-serde = { version = "1.0.214", features = ["derive"] }
-toml = "0.8.19"
+chrono = "0.4.42"
+pulldown-cmark = "0.13.0"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "0.9.8"
 walkdir = "2.5.0"
 
 [dependencies.tera]
-version = "1.19.1"
+version = "1.20.0"
 default-features = false
