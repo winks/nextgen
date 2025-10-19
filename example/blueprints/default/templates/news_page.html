@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <h2>News page: {{ Page.title }}</h2>
+  <span>{{ Page.datefull }}<br />{{ Page.readingtime }} minute read</span>
+
+
+<div>
+{{ Page.content | safe }}
+</div>
+
+[section:{{ Page.section }}]
+
+
+{% if Page.tags %}
+<p>
+  Tags:
+  {% for tag in Page.tags %}
+  <a href="/tags/{{ tag }}">{{ tag }}</a>&nbsp;
+  {% endfor %}
+</p>
+{% endif %}
+
+{% endblock content %}

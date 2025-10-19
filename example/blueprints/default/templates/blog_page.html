@@ -8,11 +8,16 @@
 <div>
 {{ Page.content | safe }}
 </div>
+
+[section:{{ Page.section }}]
+
+{% if Page.tags %}
 <p>
   Tags:
   {% for tag in Page.tags %}
   <a href="/tags/{{ tag }}">{{ tag }}</a>&nbsp;
   {% endfor %}
 </p>
+{% endif %}
 
 {% endblock content %}
