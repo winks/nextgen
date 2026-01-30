@@ -7,7 +7,7 @@ Inspired by hugo, incentivised by hugo's too many features.
 
 ## How to build
 
-Have a somewhat current version of stable Rust, 1.82.0 works fine.
+Have a somewhat current version of stable Rust, 1.92.0 works fine.
 
 
 ```

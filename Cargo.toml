@@ -1,6 +1,6 @@
 [package]
 name = "nextgen"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Florian Anderiasch <fa@art-core.org>"]
 edition = "2018"
 

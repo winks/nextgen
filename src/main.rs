@@ -100,7 +100,7 @@ impl Stats {
         }
     }
     fn print(&self) {
-        println!("+-------------+-----+");
+        println!("--------------+----");
         println!("Pages         | {}", self.pages);
         println!("Section files | {}", self.sections);
         println!("RSS files     | {}", self.rss);
@@ -150,25 +150,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let t0x = &(dir_bp_static.clone());
     let ps01 = Path::new(t0x);
     let pp0 = Path::new(dir_public);
-    match fs::create_dir_all(&pp0) {
-        Ok(x) => x,
-        Err(e) => {
-            println!("Could not create output directory {}: {}", pp0.display(), e)
-        }
-    };
+    if let Err(e) = fs::create_dir_all(&pp0) {
+        panic!("Could not create output directory {}: {}", pp0.display(), e);
+    }
 
     let tera = match Tera::new(&(dir_bprint.to_owned() + "/templates/**/*.html")) {
         Ok(t) => t,
         Err(e) => {
-            println!("Parsing error(s): {}", e);
-            panic!();
+            panic!("Parsing error(s): {}", e);
         }
     };
     let mut tera_macro = match Tera::new(&(dir_bprint.to_owned() + "/macros/**/*.html")) {
         Ok(t) => t,
         Err(e) => {
-            println!("Parsing error(s): {}", e);
-            panic!();
+            panic!("Parsing error(s): {}", e);
         }
     };
     stats.templates = tera.templates.len();
@@ -182,15 +177,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let path = path0.strip_prefix(dir_static)?;
 
         if entry.file_type().is_dir() {
-            if verbose {
-                println!("s:d: {} ", path.display());
-            }
+            if verbose { println!("s:d: {} ", path.display()); }
             fs::create_dir_all(pp0.join(path))?;
         }
         if entry.file_type().is_file() {
-            if verbose {
-                println!("s:f: {} ", path.display());
-            }
+            if verbose { println!("s:f: {} ", path.display()); }
             fs::copy(path0, pp0.join(path))?;
             stats.files += 1;
         }
@@ -204,15 +195,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let path = path01.strip_prefix(dir_bp_static.clone())?;
 
         if entry.file_type().is_dir() {
-            if verbose {
-                println!("s:d: {} ", path.display());
-            }
+            if verbose { println!("s:d: {} ", path.display()); }
             fs::create_dir_all(pp0.join(path))?;
         }
         if entry.file_type().is_file() {
-            if verbose {
-                println!("s:f: {} ", path.display());
-            }
+            if verbose { println!("s:f: {} ", path.display()); }
             fs::copy(path01, pp0.join(path))?;
             stats.files += 1;
         }
@@ -225,19 +212,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     content_sections.insert(String::from("_index"), sec_pages.clone());
     content_sections.insert(String::from("_default"), sec_pages.clone());
     content_sections.insert(String::from("_pages"), sec_pages.clone());
-    for entry in WalkDir::new(dir_content)
-            .into_iter()
-            .filter_map(Result::ok) {
-        let path0 = entry.path();
-        if path0 == pc0 { continue; }
-        if entry.file_type().is_dir() {
-            let path = path0.strip_prefix(dir_content)?;
-            if verbose {
-                println!("d:d: {}", path.display());
+    if let Ok(de) = fs::read_dir(dir_content) {
+        for p in de {
+            let pp = p.as_ref().unwrap().path();
+            if !pp.is_dir() { continue; }
+            let sec_name = pp.file_name().unwrap().to_str().unwrap();
+            fs::create_dir_all(pp0.join(sec_name))?;
+            let sec_key = String::from(sec_name);
+            if !content_sections.contains_key(&sec_key) {
+                if verbose { println!("d:n {:?}", &sec_key); }
+                content_sections.insert(sec_key, sec_pages.clone());
             }
-            fs::create_dir_all(pp0.join(path))?;
-            let sec_name = path.parent().unwrap().to_str().unwrap();
-            content_sections.insert(String::from(sec_name), sec_pages.clone());
         }
     }
 
@@ -246,8 +231,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .into_iter()
             .filter_map(Result::ok) {
         let path0 = entry.path();
-        if path0 == pc0 { continue; }
-        if entry.file_type().is_dir() {
+        if path0 == pc0 || entry.file_type().is_dir() {
             continue;
         }
         let fname = entry.file_name().to_str().unwrap();
@@ -285,7 +269,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         page.template = "page.html".to_string();
         let tags = value_fm.tags.unwrap_or_default();
         if !tags.is_empty() {
-            page.tags = tags.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+            page.tags = tags.iter().map(|v| v.as_str().unwrap_or("").to_string()).filter(|t| t.len() > 0).collect();
         }
 
         // count words for reading time
@@ -322,6 +306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pf;
         let pp1 = pp0.join(path);
         let mut skip_write = false;
+        let mut dir_link = true;
         if pp1.to_str().unwrap() == "./public/_index.md" {
             // special case for the /index.html
             pf = pp1.with_file_name("index.html");
@@ -337,6 +322,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             page.section_index = true;
             page.rsslink = value_fm.rsslink.unwrap_or_default();
             // println!("PR1 {} {}", page.title, page.rsslink);
+        } else if path.to_str().unwrap().ends_with(".html.md") {
+            pf = pp1.with_extension("");
+            dir_link = false;
+            if page.section.is_empty() {
+                page.section = "_default".to_string();
+            }
         } else {
             let pd = pp1.with_extension("");
             pf = pd.join("index.html");
@@ -346,7 +337,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
+        if dir_link {
+            page.link = pf.strip_prefix(pp0).unwrap().with_file_name("").to_str().unwrap().to_string();
+        } else {
+            page.link = pf.strip_prefix(pp0).unwrap().to_str().unwrap().to_string();
+        }
         page_vars.insert("Page", &page);
         if !skip_write {
             write(&tera, &page.template, page_vars, "d:f", &pf, pp0, verbose);
@@ -358,7 +353,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for (sec, pp) in content_sections.iter_mut() {
-        if pp.is_empty() || &sec[0..1] == "_" { continue; }
+        if pp.is_empty() || sec.len() == 0 || &sec[0..1] == "_" { continue; }
         (*pp).sort_by(|a, b| b.date.cmp(&a.date));
         // section index page
         let mut pi_tpl = String::new();
@@ -412,16 +407,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut index_vars = Context::new();
     index_vars.insert("Site", &config);
 
-    if content_sections.contains_key("_index") {
-        match &content_sections.get("_index") {
-            None => {},
-            Some(csi) => {
-                if !csi.is_empty() {
-                    index_vars.insert("Page", &csi[0].clone());
-                }
-            }
+    if let Some(csi) = &content_sections.get("_index") {
+        if !csi.is_empty() {
+            index_vars.insert("Page", &csi[0].clone());
         }
     }
+
     let pages = content_sections.get_mut("_pages").unwrap();
     pages.sort_by(|a, b| b.date.cmp(&a.date));
 
@@ -439,9 +430,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     write(&tera, "rss_page.html", rss_index_vars, "d:r", &pp0.join(&config.rsslink[1..]), pp0, verbose);
 
     stats.print();
-    match time_start.elapsed() {
-        Ok(elapsed) => println!("Took {} msecs.", elapsed.as_millis()),
-        Err(e) => println!("Err: {:?}", e),
+    if let Ok(elapsed) = time_start.elapsed() {
+        println!("Took {} msecs.", elapsed.as_millis());
     }
 
     Ok(())
